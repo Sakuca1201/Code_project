@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>光線追蹤水珠模擬器（觀察者與出射角）</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #c8e7ff, #ffffff);
+      color: #333;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      align-items: flex-start;
+    }
+    .container {
+      background: #fff;
+      max-width: 1000px;
+      width: 100%;
+      border-radius: 16px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      padding: 30px 40px;
+      user-select: none;
+    }
+    h1 {
+      margin-top: 0;
+      font-weight: 700;
+      font-size: 1.8rem;
+      color: #005ea1;
+      text-align: center;
+    }
+    label {
+      margin-top: 20px;
+      display: block;
+      font-weight: 600;
+      font-size: 1rem;
+      color: #005ea1;
+      user-select: none;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 8px;
+      background: #d0e6ff;
+      outline: none;
+      margin-top: 6px;
+      transition: background 0.3s ease;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #0077cc;
+      cursor: pointer;
+      border-radius: 50%;
+      box-shadow: 0 0 6px rgba(0,119,204,0.7);
+      border: none;
+      margin-top: -6px;
+    }
+    input[type="range"]:hover::-webkit-slider-thumb {
+      background: #005ea1;
+    }
+    .slider-value {
+      font-weight: 600;
+      color: #0077cc;
+      float: right;
+      user-select: text;
+    }
+    svg {
+      display: block;
+      margin: 30px auto 10px auto;
+      background: #f0f8ff;
+      border: 1.5px solid #a0c4ff;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 122, 255, 0.15);
+    }
+    p {
+      text-align: center;
+      font-size: 0.95rem;
+      color: #555;
+      margin-top: 12px;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" role="main" aria-label="光線追蹤水珠模擬器控制區">
+    <h1>光線追蹤水珠模擬器（含觀察者與出射角）</h1>
+
+    <label for="theta">入射角度（°，順時針旋轉）：<span id="theta-val" class="slider-value">0</span></label>
+    <input type="range" id="theta" min="0" max="360" step="1" value="0" />
+
+    <label for="offsetX">水平偏移（px）：<span id="offsetX-val" class="slider-value">-300</span></label>
+    <input type="range" id="offsetX" min="-600" max="0" step="1" value="-300" />
+
+    <label for="offsetY">垂直偏移（px）：<span id="offsetY-val" class="slider-value">0</span></label>
+    <input type="range" id="offsetY" min="-400" max="400" step="1" value="0" />
+
+    <svg width="1000" height="700" id="svg" role="img" aria-label="水珠及光線軌跡示意圖">
+      <circle cx="700" cy="150" r="100" stroke="black" fill="none" />
+    </svg>
+
+    <p>光線經反射後從水珠左下方射出時，會顯示出射角（與地面夾角），並於末端模擬觀察者與彩虹視圖。</p>
+  </div>
+
+<script>
+const svg = document.getElementById("svg");
+const thetaSlider = document.getElementById("theta");
+const offsetXSlider = document.getElementById("offsetX");
+const offsetYSlider = document.getElementById("offsetY");
+
+const thetaVal = document.getElementById("theta-val");
+const offsetXVal = document.getElementById("offsetX-val");
+const offsetYVal = document.getElementById("offsetY-val");
+
+const R = 100, cx = 700, cy = 150;
+const nAir = 1.0;
+const COLORS = [
+  { color: "red", nWater: 1.331 },
+  { color: "blue", nWater: 1.343 }
+];
+
+function toRad(deg) { return deg * Math.PI / 180; }
+function toDeg(rad) { return rad * 180 / Math.PI; }
+function normalize(v) {
+  const len = Math.hypot(v.x, v.y);
+  return { x: v.x / len, y: v.y / len };
+}
+function dot(a, b) { return a.x * b.x + a.y * b.y; }
+function reflect(v, n) {
+  const d = dot(v, n);
+  return { x: v.x - 2 * d * n.x, y: v.y - 2 * d * n.y };
+}
+function refract(v, n, n1, n2) {
+  const cosi = -dot(v, n);
+  const eta = n1 / n2;
+  const sint2 = eta * eta * (1 - cosi * cosi);
+  if (sint2 > 1) return null;
+  const cost = Math.sqrt(1 - sint2);
+  return {
+    x: eta * v.x + (eta * cosi - cost) * n.x,
+    y: eta * v.y + (eta * cosi - cost) * n.y
+  };
+}
+function intersectCircle(origin, dir) {
+  const dx = dir.x, dy = dir.y;
+  const fx = origin.x - cx, fy = origin.y - cy;
+  const a = dx*dx + dy*dy;
+  const b = 2 * (fx*dx + fy*dy);
+  const c = fx*fx + fy*fy - R*R;
+  const disc = b*b - 4*a*c;
+  if (disc < 0) return null;
+  const sqrtDisc = Math.sqrt(disc);
+  const t1 = (-b - sqrtDisc) / (2*a);
+  const t2 = (-b + sqrtDisc) / (2*a);
+  const t = (t1 > 1e-4) ? t1 : ((t2 > 1e-4) ? t2 : null);
+  if (t === null) return null;
+  return { x: origin.x + t * dx, y: origin.y + t * dy };
+}
+
+function traceRayColor(nWater, strokeColor, labelOffsetY) {
+  const theta = parseFloat(thetaSlider.value);
+  const offsetX = parseFloat(offsetXSlider.value);
+  const offsetY = parseFloat(offsetYSlider.value);
+
+  let origin = { x: cx + offsetX, y: cy + offsetY };
+  let dir = normalize({ x: Math.cos(toRad(theta)), y: Math.sin(toRad(theta)) });
+
+  const rayPath = [origin];
+  let inside = false, bounces = 0, maxBounces = 20;
+  let nFrom = nAir, nTo = nWater;
+
+  while (bounces < maxBounces) {
+    const hit = intersectCircle(origin, dir);
+    if (!hit) break;
+    rayPath.push(hit);
+
+    const normal = normalize({ x: hit.x - cx, y: hit.y - cy });
+    const surfaceNormal = inside ? { x: -normal.x, y: -normal.y } : normal;
+    const nextDir = refract(dir, surfaceNormal, nFrom, nTo);
+
+    if (inside && nextDir && nextDir.x < 0 && nextDir.y > 0) {
+      const outPt = { x: hit.x + nextDir.x * 400, y: hit.y + nextDir.y * 400 };
+      rayPath.push(outPt);
+
+      const angle = toDeg(Math.atan2(-nextDir.y, -nextDir.x));
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", outPt.x + 10);
+      text.setAttribute("y", outPt.y + labelOffsetY);
+      text.setAttribute("font-size", "12");
+      text.setAttribute("fill", strokeColor);
+      text.textContent = `出射角: ${angle.toFixed(1)}°`;
+      svg.appendChild(text);
+
+      // 眼睛觀察者符號
+      const eye = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      eye.setAttribute("cx", outPt.x);
+      eye.setAttribute("cy", outPt.y);
+      eye.setAttribute("r", 6);
+      eye.setAttribute("fill", strokeColor);
+      eye.setAttribute("stroke", "black");
+      eye.setAttribute("stroke-width", "1");
+      svg.appendChild(eye);
+      break;
+    } else if (inside) {
+      dir = reflect(dir, surfaceNormal);
+      origin = hit;
+      bounces++;
+    } else {
+      if (nextDir === null) {
+        dir = reflect(dir, surfaceNormal);
+        origin = hit;
+        bounces++;
+      } else {
+        dir = nextDir;
+        origin = hit;
+        inside = true;
+        [nFrom, nTo] = [nTo, nFrom];
+      }
+    }
+  }
+
+  const pathStr = rayPath.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", pathStr);
+  path.setAttribute("stroke", strokeColor);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke-width", 2);
+  svg.appendChild(path);
+}
+
+function traceAllColors() {
+  thetaVal.textContent = thetaSlider.value;
+  offsetXVal.textContent = offsetXSlider.value;
+  offsetYVal.textContent = offsetYSlider.value;
+
+  while (svg.children.length > 1) svg.removeChild(svg.lastChild);
+
+  traceRayColor(COLORS[0].nWater, COLORS[0].color, -10); // red
+  traceRayColor(COLORS[1].nWater, COLORS[1].color, 10);  // blue
+}
+
+thetaSlider.addEventListener("input", traceAllColors);
+offsetXSlider.addEventListener("input", traceAllColors);
+offsetYSlider.addEventListener("input", traceAllColors);
+
+traceAllColors();
+</script>
+</body>
+</html>

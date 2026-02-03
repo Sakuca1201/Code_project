@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extract SVG Coordinates</title>
+</head>
+<body>
+  <h1>SVG 座標提取工具</h1>
+
+  <!-- 文件選擇器 -->
+  <input type="file" id="fileInput" accept=".svg" />
+  <button id="loadButton">加載SVG</button>
+
+  <!-- 控制座標點數量 -->
+  <label for="numPoints">座標點數量: </label>
+  <input type="number" id="numPoints" value="100" min="1" max="1000" />
+
+  <button id="extractButton" disabled>提取座標點</button>
+
+  <!-- 用於顯示SVG的內容 -->
+  <div id="svgContainer"></div>
+  <pre id="output"></pre>
+
+  <script>
+    let svgElement = null; // 用於儲存加載的SVG元素
+    let numPoints = 100; // 默認提取100個點
+
+    // 監聽輸入框變動事件，更新提取的座標數量
+    document.getElementById('numPoints').addEventListener('input', (event) => {
+      numPoints = parseInt(event.target.value, 10);
+    });
+
+    // 監聽加載按鈕點擊事件
+    document.getElementById('loadButton').addEventListener('click', () => {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+
+      if (!file) {
+        alert('請先選擇一个SVG文件！');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const svgContainer = document.getElementById('svgContainer');
+        svgContainer.innerHTML = event.target.result; // 加載SVG內容到頁面
+        svgElement = svgContainer.querySelector('svg'); // 獲取加載的SVG元素
+
+        if (svgElement) {
+          document.getElementById('extractButton').disabled = false; // 啟用提取按鈕
+        } else {
+          alert('文件中不包含有效的SVG内容！');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    // 監聽提取按鈕點擊事件
+    document.getElementById('extractButton').addEventListener('click', () => {
+      if (!svgElement) {
+        alert('請先加載一個有效的SVG文件！');
+        return;
+      }
+
+      const paths = svgElement.querySelectorAll('path'); // 獲取SVG中的路徑元素
+      const output = document.getElementById('output');
+      output.textContent = ''; // 清空之前的輸出
+
+      // 提取閉合路徑
+      const outerPaths = [];
+      paths.forEach((path) => {
+        const d = path.getAttribute('d');
+        if (d && (d.includes('Z') || d.includes('z'))) {
+          // 判斷路徑是否閉合
+          outerPaths.push(path);
+        }
+      });
+
+      if (outerPaths.length === 0) {
+        alert('SVG中没有閉合路徑！');
+        return;
+      }
+
+      // 找到最長的閉合路徑（通常是外圈路徑）
+      let mainPath = outerPaths[0];
+      let maxPathLength = mainPath.getTotalLength();
+
+      outerPaths.forEach((path) => {
+        const length = path.getTotalLength();
+        if (length > maxPathLength) {
+          mainPath = path;
+          maxPathLength = length;
+        }
+      });
+
+      // 提取路徑上的點
+      const points = [];
+      for (let i = 0; i < numPoints; i++) {
+        const point = mainPath.getPointAtLength((i / numPoints) * maxPathLength);
+        points.push({ x: parseFloat(point.x.toFixed(2)), y: parseFloat(point.y.toFixed(2)) });
+      }
+
+      // 確保起點與終點重合
+      if (points.length > 0 && (points[0].x !== points[points.length - 1].x || points[0].y !== points[points.length - 1].y)) {
+        points.push(points[0]);
+      }
+
+      // 輸出结果
+      output.textContent = `路徑座標:\n${points.map((p) => `{x: ${p.x}, y: ${p.y}}`).join(',\n')}`;
+    });
+  </script>
+</body>
+</html>
