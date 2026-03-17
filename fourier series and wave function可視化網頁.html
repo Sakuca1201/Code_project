@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta charset="UTF-8">
+<title>Fourier Series and Wave Function Visualization</title>
+</head>
+
+<body style="background:black;color:white;font-family:sans-serif">
+
+<h2>Fourier Series & Wave Packet Visualization</h2>
+
+模式：
+<select id="mode">
+<option value="classic">模式1：波形收斂演示</option>
+<option value="custom">模式2：自由合成</option>
+<option value="packet">模式3：Wave Packet</option>
+</select>
+
+波形：
+<select id="waveType">
+<option value="square">Square</option>
+<option value="triangle">Triangle</option>
+<option value="saw">Sawtooth</option>
+</select>
+
+<div id="customControls" style="display:none">
+圈數：
+<input type="range" id="terms" min="1" max="50" value="10">
+<span id="termsValue">10</span>
+</div>
+
+<br><br>
+
+<canvas id="canvas" width="1000" height="450"></canvas>
+
+<script src="fourier series and wave function.js"></script>
+
+</body>
+</html>
